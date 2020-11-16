@@ -132,8 +132,7 @@ class MailValidate_Action extends Typecho_Widget implements Widget_Interface_Do
             $token=md5($this->_user->mail.time().$this->_user->mail.rand());
             $this->_db->query($this->_db->update('table.users')->rows(array('validate_token' => $token))->where('uid = ?', $this->_user->uid));
             $mailcontent=file_get_contents($this->_dir."/mail.html");
-            $keys=array('%sitename%'=>$this->_options->title,'%username%'=>$this->_user->screenName,'%verifyurl%'=>"http://www.zizdog.com/MailValidate/verify?token=".$token,'%useravatar%'=>md5($this->_user->mail));
-            $mailcontent=strtr($mailcontent,$keys);
+            $keys=array('%sitename%'=>$this->_options->title,'%username%'=>$this->_user->screenName,'%verifyurl%'=>$this->_options->siteUrl."MailValidate/verify?token=".$token,'%useravatar%'=>md5($this->_user->mail));
             $this->_email->altBody = $mailcontent;
             $this->_email->msgHtml = $mailcontent;
             $result = $this->sendMail();
