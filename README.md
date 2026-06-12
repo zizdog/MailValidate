@@ -116,7 +116,7 @@ A：本插件已内置 PHPMailer 6.9.3，完全兼容 PHP 7.0 - 8.3。
 
 ## 更新日志
 
-### v1.0.0 (2024)
+### v1.0.0 (2026)
 - 重写核心逻辑，修复多个安全漏洞
 - 新增验证链接有效期机制（默认 24 小时）
 - 新增发送频率限制（默认 60 秒）
@@ -136,14 +136,10 @@ A：本插件已内置 PHPMailer 6.9.3，完全兼容 PHP 7.0 - 8.3。
 
 本插件采用 **MIT** 协议发布，欢迎自由使用、修改和转载，只需保留原作者信息。
 
-插件开发过程中参考了以下项目：
-- [CommentToMail](https://github.com/byends/CommentToMail)
-- Like 插件（原作者已无法追溯）
-
 ## 作者
 
 - **作者**: zizdog
-- **博客**: [https://blog.zizdog.com](https://blog.zizdog.com)
+- **博客**: [https://blog.zizdog.com](https://zizdog.com)
 - **项目**: [https://github.com/zizdog/MailValidate](https://github.com/zizdog/MailValidate)
 
 ---
