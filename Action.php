@@ -1,297 +1,208 @@
 <?php
+if (!defined('__TYPECHO_ROOT_DIR__')) {
+    exit;
+}
+
+/**
+ * MailValidate 前端动作：验证链接 / 发送验证邮件
+ *
+ * @package MailValidate
+ * @author zizdog
+ * @version 1.1.0
+ */
 class MailValidate_Action extends Typecho_Widget implements Widget_Interface_Do
 {
     /** @var 数据操作对象 */
     private $_db;
-    
-    /** @var 插件根目录 */
-    private $_dir;
-    
-    /** @var 插件配置信息 */
-    private $_cfg;
-    
+
     /** @var 系统配置信息 */
     private $_options;
-    
+
     /** @var 当前登录用户 */
     private $_user;
-    
-    /** @var object 邮件内容信息 */
-    private $_email;
-    
+
     public function __construct($request, $response, $params = NULL)
     {
         parent::__construct($request, $response, $params);
     }
-    
+
     public function init()
     {
-        $this->_dir = dirname(__FILE__);
         $this->_db = Typecho_Db::get();
         $this->_user = $this->widget('Widget_User');
         $this->_options = $this->widget('Widget_Options');
-        $this->_cfg = Helper::options()->plugin('MailValidate');
-        $this->_email = new stdClass();
     }
-    
+
     public function execute()
     {
         return;
     }
-    
-    /*
-     * 发送邮件
-     */
-    public function sendMail()
-    {
-        /** 载入邮件组件 */
-        require_once $this->_dir . '/lib/PHPMailer.php';
-        require_once $this->_dir . '/lib/SMTP.php';
-        require_once $this->_dir . '/lib/Exception.php';
-        $mailer = new PHPMailer\PHPMailer\PHPMailer();
-        $mailer->CharSet = 'UTF-8';
-        $mailer->Encoding = 'base64';
 
-        //选择发信模式
-        switch ($this->_cfg->mode)
-        {
-            case 'mail':
-                break;
-            case 'sendmail':
-                $mailer->IsSendmail();
-                break;
-            case 'smtp':
-                $mailer->IsSMTP();
-
-                if (in_array('validate', $this->_cfg->validate)) {
-                    $mailer->SMTPAuth = true;
-                }
-
-                if (in_array('ssl', $this->_cfg->validate)) {
-                    $mailer->SMTPSecure = "ssl";
-                }
-
-                $mailer->Host = $this->_cfg->host;
-                $mailer->Port = $this->_cfg->port;
-                $mailer->Username = $this->_cfg->user;
-                $mailer->Password = $this->_cfg->pass;
-
-                break;
-        }
-
-        $mailer->SetFrom($this->_email->from, $this->_email->fromName);
-        $mailer->AddReplyTo($this->_email->to, $this->_email->toName);
-        $mailer->Subject = $this->_email->subject;
-        $mailer->AltBody = $this->_email->altBody;
-        $mailer->MsgHTML($this->_email->msgHtml);
-        $mailer->AddAddress($this->_email->to, $this->_email->toName);
-
-        $result = $mailer->Send();
-        if (!$result) {
-            $result = $mailer->ErrorInfo;
-        }
-        
-        $mailer->ClearAddresses();
-        $mailer->ClearReplyTos();
-
-        return $result;
-    }
-    
     /**
-     * 渲染模板并替换变量
+     * 渲染结果页（fail / success），站点名做转义
+     *
+     * @param string $file
+     * @return void
      */
-    private function renderTemplate($file, $vars = array())
+    private function renderResult($file)
     {
-        $content = file_get_contents($this->_dir . '/' . $file);
-        foreach ($vars as $key => $val) {
-            $content = str_replace($key, $val, $content);
-        }
-        return $content;
+        echo MailValidate_Mail::renderTemplate($file, array(
+            '%sitename%' => htmlspecialchars((string) $this->_options->title, ENT_QUOTES, 'UTF-8'),
+        ));
     }
-    
-    /*
+
+    /**
      * 验证链接处理
+     *
+     * 语义：token 有效 + 状态为待验证 + 未过期 → 置为已验证并提权；
+     * 其余情况一律显示失败页，不区分「token 不存在」和「已过期」以免被枚举。
+     *
+     * @return void
      */
     public function action()
     {
         $this->init();
-        $token = $this->request->token;
-        
-        if (empty($token) || strlen($token) > 64) {
-            echo $this->renderTemplate('fail.html', array(
-                '%sitename%' => $this->_options->title
-            ));
+        $token = trim((string) $this->request->get('token'));
+
+        if ($token === '' || strlen($token) > 64) {
+            $this->renderResult('fail.html');
             return;
         }
-        
+
         try {
             $row = $this->_db->fetchRow(
-                $this->_db->select('validate_state', 'validate_token_expire', 'group')
+                $this->_db->select('uid', 'validate_state', 'validate_token_expire', 'group')
                     ->from('table.users')
                     ->where('validate_token = ?', $token)
             );
-            
+
             if (empty($row)) {
-                echo $this->renderTemplate('fail.html', array(
-                    '%sitename%' => $this->_options->title
-                ));
+                $this->renderResult('fail.html');
                 return;
             }
-            
-            $state = (int)$row['validate_state'];
-            $expire = (int)$row['validate_token_expire'];
-            
+
+            $uid = (int) $row['uid'];
+            $state = (int) $row['validate_state'];
+            $expire = (int) $row['validate_token_expire'];
+
             // 已验证，友好提示
             if ($state === MailValidate_Plugin::STATE_VERIFIED) {
-                echo $this->renderTemplate('success.html', array(
-                    '%sitename%' => $this->_options->title
-                ));
+                $this->renderResult('success.html');
                 return;
             }
-            
+
             // 状态不是待验证
             if ($state !== MailValidate_Plugin::STATE_PENDING) {
-                echo $this->renderTemplate('fail.html', array(
-                    '%sitename%' => $this->_options->title
-                ));
+                $this->renderResult('fail.html');
                 return;
             }
-            
+
             // 检查 token 是否过期
             if ($expire > 0 && $expire < time()) {
-                echo $this->renderTemplate('fail.html', array(
-                    '%sitename%' => $this->_options->title
-                ));
+                MailValidate_Mail::log($uid, '', (string) $this->request->getIp(), 'verify', false, '验证链接已过期');
+                $this->renderResult('fail.html');
                 return;
             }
-            
+
             // 更新为已验证
             $this->_db->query(
                 $this->_db->update('table.users')
                     ->rows(array('validate_state' => MailValidate_Plugin::STATE_VERIFIED))
-                    ->where('validate_token = ?', $token)
+                    ->where('uid = ?', $uid)
             );
-            
+
             // 提升权限：subscriber -> contributor
             if ($row['group'] === 'subscriber') {
                 $this->_db->query(
                     $this->_db->update('table.users')
                         ->rows(array('group' => 'contributor'))
-                        ->where('validate_token = ?', $token)
+                        ->where('uid = ?', $uid)
                 );
             }
-            
-            echo $this->renderTemplate('success.html', array(
-                '%sitename%' => $this->_options->title
-            ));
-            
-        } catch (Exception $ex) {
-            echo $this->renderTemplate('fail.html', array(
-                '%sitename%' => $this->_options->title
-            ));
+
+            MailValidate_Mail::log($uid, '', (string) $this->request->getIp(), 'verify', true, '');
+
+            $this->renderResult('success.html');
+        } catch (Throwable $ex) {
+            error_log('[MailValidate] 验证失败：' . $ex->getMessage());
+            $this->renderResult('fail.html');
         }
     }
-    
-    /*
-     * 发送验证邮件
+
+    /**
+     * 发送验证邮件（已登录用户手动触发）
+     *
+     * @return void
      */
     public function send()
     {
         $this->init();
-        
+        $notice = $this->widget('Widget_Notice');
+
         // 检查登录状态
         if (!$this->_user->hasLogin()) {
-            $this->widget('Widget_Notice')->set('请先登录', 'notice');
+            $notice->set('请先登录', 'notice');
             $this->response->goBack();
             return;
         }
-        
+
+        $mail = trim((string) $this->_user->mail);
+        $uid = (int) $this->_user->uid;
+
         // 检查邮箱是否填写
-        if (empty($this->_user->mail)) {
-            $this->widget('Widget_Notice')->set('请先在个人资料中填写邮箱地址', 'notice');
+        if ($mail === '') {
+            $notice->set('请先在个人资料中填写邮箱地址', 'notice');
             $this->response->goBack();
             return;
         }
-        
+
         // 获取当前状态
         $row = $this->_db->fetchRow(
             $this->_db->select('validate_state', 'validate_last_send')
                 ->from('table.users')
-                ->where('uid = ?', $this->_user->uid)
+                ->where('uid = ?', $uid)
         );
-        
-        $state = isset($row['validate_state']) ? (int)$row['validate_state'] : 0;
-        $lastSend = isset($row['validate_last_send']) ? (int)$row['validate_last_send'] : 0;
-        
+
+        $state = isset($row['validate_state']) ? (int) $row['validate_state'] : 0;
+        $lastSend = isset($row['validate_last_send']) ? (int) $row['validate_last_send'] : 0;
+
         // 已验证无需重复
         if ($state === MailValidate_Plugin::STATE_VERIFIED) {
-            $this->widget('Widget_Notice')->set('您的邮箱已验证，无需重复操作', 'success');
+            $notice->set('您的邮箱已验证，无需重复操作', 'success');
             $this->response->goBack();
             return;
         }
-        
-        // 频率限制
-        $interval = isset($this->_cfg->sendInterval) ? (int)$this->_cfg->sendInterval : 60;
+
+        $cfg = MailValidate_Mail::config();
+        $interval = MailValidate_Mail::getInt($cfg, 'sendInterval', 60);
+
+        // 频率限制（同一用户）
         if ($lastSend > 0 && (time() - $lastSend) < $interval) {
             $wait = $interval - (time() - $lastSend);
-            $this->widget('Widget_Notice')->set("发送太频繁，请 {$wait} 秒后重试", 'notice');
+            $notice->set("发送太频繁，请 {$wait} 秒后重试", 'notice');
             $this->response->goBack();
             return;
         }
-        
-        // 生成安全 token
-        if (function_exists('random_bytes')) {
-            $token = bin2hex(random_bytes(16));
-        } else {
-            $token = md5(uniqid(mt_rand(), true) . $this->_user->mail . time());
-        }
-        
-        // 计算过期时间
-        $expire = isset($this->_cfg->tokenExpire) ? (int)$this->_cfg->tokenExpire : 86400;
-        $expireTime = time() + $expire;
-        
-        // 更新数据库：token、过期时间、发送时间、状态
-        $this->_db->query(
-            $this->_db->update('table.users')
-                ->rows(array(
-                    'validate_token' => $token,
-                    'validate_token_expire' => $expireTime,
-                    'validate_last_send' => time(),
-                    'validate_state' => MailValidate_Plugin::STATE_PENDING
-                ))
-                ->where('uid = ?', $this->_user->uid)
+
+        $result = MailValidate_Mail::sendVerification(
+            $uid,
+            $mail,
+            (string) $this->_user->screenName,
+            'resend',
+            (string) $this->request->getIp(),
+            false,
+            $cfg
         );
-        
-        // 准备邮件内容
-        $this->_email->from = $this->_cfg->user;
-        $this->_email->fromName = $this->_cfg->fromName ? $this->_cfg->fromName : $this->_options->title;
-        $this->_email->to = $this->_user->mail;
-        $this->_email->toName = $this->_user->screenName;
-        $this->_email->subject = $this->_cfg->titleForGuest;
-        
-        $mailcontent = file_get_contents($this->_dir . "/mail.html");
-        $keys = array(
-            '%sitename%' => $this->_options->title,
-            '%username%' => $this->_user->screenName,
-            '%verifyurl%' => $this->_options->siteUrl . "MailValidate/verify?token=" . $token,
-            '%useravatar%' => md5(strtolower(trim($this->_user->mail)))
-        );
-        
-        foreach ($keys as $key => $val) {
-            $mailcontent = str_replace($key, $val, $mailcontent);
-        }
-        
-        $this->_email->altBody = strip_tags($mailcontent);
-        $this->_email->msgHtml = $mailcontent;
-        
-        $result = $this->sendMail();
-        
-        if ($result === true) {
-            $this->widget('Widget_Notice')->set('邮件发送成功，请查收邮箱完成验证', 'success');
+
+        if (!empty($result['ok'])) {
+            $notice->set('邮件发送成功，请查收邮箱完成验证', 'success');
+        } elseif (!empty($result['limited'])) {
+            $notice->set($result['message'], 'notice');
         } else {
-            $this->widget('Widget_Notice')->set('邮件发送失败：' . $result, 'notice');
+            // 不把 SMTP 原始报错回显给普通用户，细节在插件后台「最近日志」里
+            $notice->set('邮件发送失败，请稍后重试；若持续失败请联系管理员', 'notice');
         }
-    
+
         $this->response->goBack();
     }
 }
