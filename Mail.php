@@ -16,7 +16,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package MailValidate
  * @author zizdog
- * @version 1.1.0
+ * @version 1.1.1
  */
 class MailValidate_Mail
 {
@@ -254,6 +254,7 @@ class MailValidate_Mail
                     $db->select(array('COUNT(*)' => 'num'))
                         ->from('table.' . self::LOG_TABLE)
                         ->where('status = ?', 1)
+                        ->where("(action = 'register' OR action = 'resend' OR action = 'test')")
                         ->where('created > ?', $since)
                 );
             } else {
@@ -278,6 +279,7 @@ class MailValidate_Mail
                     ->from('table.' . self::LOG_TABLE)
                     ->where('ip = ?', $ip)
                     ->where('status = ?', 1)
+                    ->where("(action = 'register' OR action = 'resend' OR action = 'test')")
                     ->where('created > ?', time() - 3600)
             );
 
