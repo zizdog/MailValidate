@@ -16,7 +16,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) {
  *
  * @package MailValidate
  * @author zizdog
- * @version 1.1.1
+ * @version 1.1.2
  */
 class MailValidate_Mail
 {

@@ -10,7 +10,7 @@
  *
  * @package MailValidate
  * @author zizdog
- * @version 1.1.1
+ * @version 1.1.2
  */
 
 if (!defined('__TYPECHO_ADMIN__')) {
@@ -329,6 +329,28 @@ include rtrim(__TYPECHO_ROOT_DIR__, '/') . '/admin/menu.php';
     <div class="body container">
         <h2 class="typecho-page-title">邮箱验证</h2>
 
+        <style>
+            /* 操作列：inline-block + 外边距留白，不依赖 flex/gap（老 WebKit 也正常）；
+               窄屏时整颗按钮换行，而不是把按钮文字拆开 */
+            .mv-actions .mv-action-group { display: block; }
+            .mv-actions form {
+                display: inline-block;
+                vertical-align: top;
+                margin: 0 6px 6px 0;
+            }
+            .mv-actions form:last-child { margin-right: 0; }
+            .mv-actions .btn {
+                margin: 0;
+                padding: 0 10px;
+                white-space: nowrap;
+            }
+            /* 「上次发送 / 到期」两行稍微紧凑，避免行高被撑大 */
+            .mv-time-cell { line-height: 1.5; white-space: nowrap; }
+            /* 固定列宽，百分比才会真正生效；不然浏览器按内容分配，操作列会被挤窄 */
+            .mv-table { table-layout: fixed; width: 100%; }
+            .mv-table td { overflow-wrap: break-word; }
+        </style>
+
         <?php if ($flash !== ''): ?>
             <div class="message <?php echo $flashType === 'notice' ? 'notice' : 'success'; ?>"
                  style="padding:10px 14px;border-radius:3px;margin-bottom:14px;background:<?php echo $flashType === 'notice' ? '#fdf3e7' : '#eef7ee'; ?>;">
@@ -388,34 +410,24 @@ include rtrim(__TYPECHO_ROOT_DIR__, '/') . '/admin/menu.php';
                     </div>
                 </form>
 
-                <form method="post" style="margin:10px 0;">
+                <form method="post" class="mv-test-form" style="margin:10px 0;">
                     <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
                     <input type="hidden" name="do" value="test"/>
                     <button type="submit" class="btn btn-s">发送一封测试邮件给我</button>
                     <span style="color:#888;margin-left:8px;">收件人：<?php echo mv_h($user->mail); ?></span>
                 </form>
 
-                <table class="typecho-list-table">
-                    <colgroup>
-                        <col width="6%"/>
-                        <col width="14%"/>
-                        <col width="16%"/>
-                        <col width="20%"/>
-                        <col width="10%"/>
-                        <col width="10%"/>
-                        <col width="14%"/>
-                        <col width="10%"/>
-                    </colgroup>
+                <table class="typecho-list-table mv-table">
                     <thead>
                     <tr>
-                        <th>UID</th>
-                        <th>用户名</th>
-                        <th>昵称</th>
-                        <th>邮箱</th>
-                        <th>用户组</th>
-                        <th>验证状态</th>
-                        <th>上次发送 / 过期</th>
-                        <th>操作</th>
+                        <th style="width:5%;">UID</th>
+                        <th style="width:12%;">用户名</th>
+                        <th style="width:12%;">昵称</th>
+                        <th style="width:20%;">邮箱</th>
+                        <th style="width:9%;">用户组</th>
+                        <th style="width:9%;">验证状态</th>
+                        <th style="width:15%;">上次发送 / 过期</th>
+                        <th style="width:18%;">操作</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -432,35 +444,37 @@ include rtrim(__TYPECHO_ROOT_DIR__, '/') . '/admin/menu.php';
                             <td><?php echo mv_h($item['mail']); ?></td>
                             <td><?php echo mv_h(mv_group_label((string) $item['group'])); ?></td>
                             <td><?php echo mv_h(mv_state_label((int) $item['validate_state'])); ?></td>
-                            <td>
+                            <td class="mv-time-cell">
                                 <?php echo mv_h(mv_time($item['validate_last_send'])); ?>
                                 <br/>
                                 <span style="color:#999;">到期 <?php echo mv_h(mv_time($item['validate_token_expire'])); ?></span>
                             </td>
-                            <td>
-                                <form method="post" style="display:inline;">
-                                    <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
-                                    <input type="hidden" name="do" value="resend"/>
-                                    <input type="hidden" name="uid" value="<?php echo (int) $item['uid']; ?>"/>
-                                    <button type="submit" class="btn btn-s">重发</button>
-                                </form>
-                                <?php if ((int) $item['validate_state'] !== MailValidate_Plugin::STATE_VERIFIED): ?>
-                                    <form method="post" style="display:inline;">
-                                        <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
-                                        <input type="hidden" name="do" value="mark"/>
-                                        <input type="hidden" name="uid" value="<?php echo (int) $item['uid']; ?>"/>
-                                        <input type="hidden" name="state" value="<?php echo MailValidate_Plugin::STATE_VERIFIED; ?>"/>
-                                        <button type="submit" class="btn btn-s">标记已验证</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" style="display:inline;">
-                                        <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
-                                        <input type="hidden" name="do" value="mark"/>
-                                        <input type="hidden" name="uid" value="<?php echo (int) $item['uid']; ?>"/>
-                                        <input type="hidden" name="state" value="<?php echo MailValidate_Plugin::STATE_UNVERIFIED; ?>"/>
-                                        <button type="submit" class="btn btn-s">重置</button>
-                                    </form>
-                                <?php endif; ?>
+                            <td class="mv-actions">
+                                <div class="mv-action-group">
+                                    <?php if ((int) $item['validate_state'] !== MailValidate_Plugin::STATE_VERIFIED): ?>
+                                        <form method="post">
+                                            <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
+                                            <input type="hidden" name="do" value="resend"/>
+                                            <input type="hidden" name="uid" value="<?php echo (int) $item['uid']; ?>"/>
+                                            <button type="submit" class="btn btn-s">重发</button>
+                                        </form>
+                                        <form method="post">
+                                            <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
+                                            <input type="hidden" name="do" value="mark"/>
+                                            <input type="hidden" name="uid" value="<?php echo (int) $item['uid']; ?>"/>
+                                            <input type="hidden" name="state" value="<?php echo MailValidate_Plugin::STATE_VERIFIED; ?>"/>
+                                            <button type="submit" class="btn btn-s">手动通过</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post">
+                                            <input type="hidden" name="_" value="<?php echo mv_h($token); ?>"/>
+                                            <input type="hidden" name="do" value="mark"/>
+                                            <input type="hidden" name="uid" value="<?php echo (int) $item['uid']; ?>"/>
+                                            <input type="hidden" name="state" value="<?php echo MailValidate_Plugin::STATE_UNVERIFIED; ?>"/>
+                                            <button type="submit" class="btn btn-s">重置</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>

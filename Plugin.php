@@ -5,7 +5,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
  *
  * @package MailValidate
  * @author zizdog
- * @version 1.1.1
+ * @version 1.1.2
  * @link https://blog.zizdog.com
  */
 
